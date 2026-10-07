@@ -1,0 +1,1760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Everyday Life PWA</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            accent: {
+              light: '#007AFF',
+              DEFAULT: '#007AFF',
+              dark: '#0A84FF',
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* iOS Tap and smooth scrolling styles */
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea {
+      user-select: text;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .pb-safe { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+    .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+    
+    /* Custom Scrollbar for sleek UI */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(150, 150, 150, 0.2);
+      border-radius: 99px;
+    }
+    
+    /* Animations */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    .animate-glow {
+      animation: pulseGlow 2.5s infinite ease-in-out;
+    }
+
+    @keyframes confettiFall {
+      0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+    .animate-confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      animation: confettiFall 3s linear infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-200 flex justify-center">
+
+  <div id="root" class="w-full max-w-md"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    const STORAGE_KEY = 'everyday_pwa_data_v4';
+
+    // Dynamic Leveling Formula based on Exponential Scaling
+    const getLevelInfo = (xp) => {
+      let level = 1;
+      let reqXp = 100;
+      let totalXpAccumulated = 0;
+
+      while (xp >= totalXpAccumulated + reqXp) {
+        totalXpAccumulated += reqXp;
+        level++;
+        reqXp = Math.floor(100 * Math.pow(level, 1.22));
+      }
+
+      const currentLevelXp = xp - totalXpAccumulated;
+      const progressPercent = Math.min(100, Math.max(0, (currentLevelXp / reqXp) * 100));
+
+      // Titles & Ranks
+      const titles = [
+        { min: 1, title: 'Novice Explorer', badge: '🌱', color: 'from-slate-500 to-slate-700' },
+        { min: 3, title: 'Consistent Striver', badge: '⚡', color: 'from-blue-500 to-indigo-600' },
+        { min: 5, title: 'Adept Crusader', badge: '🔥', color: 'from-amber-500 to-orange-600' },
+        { min: 8, title: 'Unstoppable Titan', badge: '🛡️', color: 'from-emerald-500 to-teal-700' },
+        { min: 12, title: 'Master Virtuoso', badge: '👑', color: 'from-purple-600 to-indigo-800' },
+        { min: 20, title: 'Mythic Legend', badge: '💎', color: 'from-rose-500 to-pink-700' }
+      ];
+
+      const currentTitleObj = [...titles].reverse().find(t => level >= t.min) || titles[0];
+
+      return {
+        level,
+        currentLevelXp,
+        reqXp,
+        progressPercent,
+        title: currentTitleObj.title,
+        badge: currentTitleObj.badge,
+        color: currentTitleObj.color
+      };
+    };
+
+    // Pure Clean Slate generator with rich dynamic achievements
+    const getCleanSlateData = () => JSON.parse(JSON.stringify({
+      theme: 'dark',
+      units: 'metric',
+      streak: 1,
+      lastActiveDate: new Date().toISOString().split('T')[0],
+      xp: 0,
+      waterGlassCount: 0,
+      waterTarget: 8,
+      sleep: { bedtime: '', wakeTime: '', quality: 0, duration: '0', history: [] },
+      bodyStats: { weight: 0, weightGoal: 0, height: 0, bodyFat: 0, waist: 0, chest: 0, biceps: 0, history: [] },
+      workouts: [],
+      challenges: [
+        { id: 'c1', title: 'Drink 8 glasses of water', xp: 60, done: false, category: 'daily' },
+        { id: 'c2', title: 'Complete 30 min workout session', xp: 120, done: false, category: 'daily' },
+        { id: 'c3', title: 'Log 8 hours of quality sleep', xp: 80, done: false, category: 'daily' },
+        { id: 'c4', title: 'Reach 4 active workouts this week', xp: 300, done: false, category: 'weekly' },
+        { id: 'c5', title: 'Perform 10 minutes of stretching', xp: 50, done: false, category: 'daily' }
+      ],
+      achievements: [
+        { id: 'a1', title: 'Genesis Explorer', desc: 'Log your first daily activity or note', unlocked: false, claimed: false, rewardXp: 100, icon: '🚀', category: 'Starter', target: 1, current: 0 },
+        { id: 'a2', title: 'Hydration Hero', desc: 'Reach daily water goal 5 times', unlocked: false, claimed: false, rewardXp: 200, icon: '💧', category: 'Wellness', target: 5, current: 0 },
+        { id: 'a3', title: 'Iron Titan', desc: 'Accumulate over 10,000kg total volume', unlocked: false, claimed: false, rewardXp: 350, icon: '🏋️‍♂️', category: 'Fitness', target: 10000, current: 0 },
+        { id: 'a4', title: 'Unstoppable Streak', desc: 'Maintain a 7-day active streak', unlocked: false, claimed: false, rewardXp: 500, icon: '🔥', category: 'Consistency', target: 7, current: 1 },
+        { id: 'a5', title: 'Sleep Virtuoso', desc: 'Log sleep 3 days with 8+ hours', unlocked: false, claimed: false, rewardXp: 250, icon: '🌙', category: 'Wellness', target: 3, current: 0 },
+        { id: 'a6', title: 'Workout Warrior', desc: 'Complete 5 fitness sessions', unlocked: false, claimed: false, rewardXp: 400, icon: '🏆', category: 'Fitness', target: 5, current: 0 },
+        { id: 'a7', title: 'Goal Crusher', desc: 'Complete 10 daily or weekly challenges', unlocked: false, claimed: false, rewardXp: 300, icon: '🎯', category: 'Mastery', target: 10, current: 0 }
+      ],
+      dailyNotes: {}
+    }));
+
+    const getInitialData = () => getCleanSlateData();
+
+    let audioCtx = null;
+    const playSound = (type = 'pop') => {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'pop') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(350, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(700, audioCtx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.08);
+        } else if (type === 'success' || type === 'claim') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+          osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.09);
+          osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.18);
+          gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.3);
+        } else if (type === 'levelup') {
+          // Level up fanfare chords
+          const notes = [440, 554.37, 659.25, 880];
+          notes.forEach((freq, idx) => {
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(freq, audioCtx.currentTime + idx * 0.08);
+            g.gain.setValueAtTime(0.2, audioCtx.currentTime + idx * 0.08);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + idx * 0.08 + 0.35);
+            o.connect(g);
+            g.connect(audioCtx.destination);
+            o.start(audioCtx.currentTime + idx * 0.08);
+            o.stop(audioCtx.currentTime + idx * 0.08 + 0.35);
+          });
+        } else if (type === 'reset') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.2);
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.2);
+        }
+      } catch (e) {}
+    };
+
+    function Icon({ name, classNames = "w-5 h-5" }) {
+      const icons = {
+        home: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
+        dumbbell: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10M20 7v10M8 5v14M16 5v14M8 12h8" />,
+        stats: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+        target: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0-6a10 10 0 100 20 10 10 0 000-20z" />,
+        grid: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />,
+        water: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />,
+        moon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />,
+        sun: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />,
+        plus: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />,
+        trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />,
+        check: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />,
+        flame: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343a7.975 7.975 0 010 11.314z" />,
+        calc: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />,
+        calendar: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />,
+        trophy: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v4a5 5 0 005 5h4a5 5 0 005-5V3M3 3h18M8 21h8m-4-4v4" />,
+        settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />,
+        arrowLeft: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />,
+        clock: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />,
+        note: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      };
+
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" className={classNames} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          {icons[name] || icons.grid}
+        </svg>
+      );
+    }
+
+    function App() {
+      const [data, setData] = useState(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          return saved ? JSON.parse(saved) : getInitialData();
+        } catch (e) {
+          return getInitialData();
+        }
+      });
+
+      const [activeTab, setActiveTab] = useState('home');
+      const [subView, setSubView] = useState(null);
+      const [showResetModal, setShowResetModal] = useState(false);
+      const [levelUpModal, setLevelUpModal] = useState(null);
+      const [toastMsg, setToastMsg] = useState('');
+
+      const prevLevelRef = useRef(getLevelInfo(data.xp).level);
+
+      // Persist state changes
+      useEffect(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {}
+
+        if (data.theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }, [data]);
+
+      // Level calculation info
+      const levelInfo = useMemo(() => getLevelInfo(data.xp), [data.xp]);
+
+      // Detect Level Ups
+      useEffect(() => {
+        if (levelInfo.level > prevLevelRef.current) {
+          playSound('levelup');
+          setLevelUpModal({
+            newLevel: levelInfo.level,
+            title: levelInfo.title,
+            badge: levelInfo.badge
+          });
+        }
+        prevLevelRef.current = levelInfo.level;
+      }, [levelInfo.level]);
+
+      // Streak XP Multiplier (e.g. 7 day streak gives 1.25x XP)
+      const xpMultiplier = useMemo(() => {
+        if (data.streak >= 14) return 1.5;
+        if (data.streak >= 7) return 1.25;
+        return 1.0;
+      }, [data.streak]);
+
+      // Dynamic Achievement Evaluation & Progress Updates
+      useEffect(() => {
+        setData(prev => {
+          let hasChanges = false;
+          const totalVol = prev.workouts.reduce((acc, w) => acc + w.volume, 0);
+          const completedChallengesCount = prev.challenges.filter(c => c.done).length;
+          const goodSleepDays = prev.sleep.history.filter(h => h.duration >= 8).length;
+
+          const updatedAchievements = prev.achievements.map(a => {
+            let currentVal = a.current || 0;
+
+            if (a.id === 'a1') currentVal = (prev.workouts.length > 0 || prev.waterGlassCount > 0 || Object.keys(prev.dailyNotes).length > 0) ? 1 : 0;
+            if (a.id === 'a2') currentVal = prev.waterGlassCount >= prev.waterTarget ? Math.min(a.target, (a.current || 0) + 1) : (a.current || 0);
+            if (a.id === 'a3') currentVal = totalVol;
+            if (a.id === 'a4') currentVal = prev.streak;
+            if (a.id === 'a5') currentVal = goodSleepDays;
+            if (a.id === 'a6') currentVal = prev.workouts.length;
+            if (a.id === 'a7') currentVal = completedChallengesCount;
+
+            const isNowUnlocked = currentVal >= a.target;
+
+            if (currentVal !== a.current || (isNowUnlocked && !a.unlocked)) {
+              hasChanges = true;
+              return {
+                ...a,
+                current: currentVal,
+                unlocked: isNowUnlocked || a.unlocked
+              };
+            }
+            return a;
+          });
+
+          return hasChanges ? { ...prev, achievements: updatedAchievements } : prev;
+        });
+      }, [data.waterGlassCount, data.workouts, data.streak, data.dailyNotes, data.challenges, data.sleep.history]);
+
+      const triggerToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(''), 2500);
+      };
+
+      const toggleTheme = () => {
+        playSound('pop');
+        setData(prev => ({ ...prev, theme: prev.theme === 'dark' ? 'light' : 'dark' }));
+      };
+
+      const addXpWithMultiplier = (baseXp) => {
+        const totalGained = Math.round(baseXp * xpMultiplier);
+        setData(prev => ({ ...prev, xp: prev.xp + totalGained }));
+        return totalGained;
+      };
+
+      const handleWaterAdd = (delta = 1) => {
+        playSound('pop');
+        let gained = 0;
+        setData(prev => {
+          const count = Math.max(0, prev.waterGlassCount + delta);
+          const reachedTarget = count === prev.waterTarget && prev.waterGlassCount < prev.waterTarget;
+          const baseXp = reachedTarget ? 60 : (delta > 0 ? 15 : 0);
+          
+          if (baseXp > 0) {
+            gained = Math.round(baseXp * xpMultiplier);
+            playSound('success');
+          }
+          return {
+            ...prev,
+            waterGlassCount: count,
+            xp: prev.xp + gained
+          };
+        });
+        if (delta > 0) triggerToast(`Hydration logged! (+${gained} XP)`);
+      };
+
+      const toggleChallenge = (id) => {
+        playSound('pop');
+        setData(prev => {
+          let gainedXp = 0;
+          const updated = prev.challenges.map(c => {
+            if (c.id === id) {
+              const nextDone = !c.done;
+              const baseXp = nextDone ? c.xp : -c.xp;
+              gainedXp = Math.round(baseXp * (nextDone ? xpMultiplier : 1));
+              return { ...c, done: nextDone };
+            }
+            return c;
+          });
+          if (gainedXp > 0) playSound('success');
+          return {
+            ...prev,
+            challenges: updated,
+            xp: Math.max(0, prev.xp + gainedXp)
+          };
+        });
+      };
+
+      const handleClaimAchievement = (achId) => {
+        playSound('claim');
+        setData(prev => {
+          let rewardGained = 0;
+          const updated = prev.achievements.map(a => {
+            if (a.id === achId && a.unlocked && !a.claimed) {
+              rewardGained = a.rewardXp;
+              return { ...a, claimed: true };
+            }
+            return a;
+          });
+
+          return {
+            ...prev,
+            achievements: updated,
+            xp: prev.xp + rewardGained
+          };
+        });
+        triggerToast(`Achievement Claimed! 🎉 (+ Bonus XP)`);
+      };
+
+      // Pristine clean slate reset handler
+      const handleFactoryReset = () => {
+        playSound('reset');
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.clear();
+        } catch (e) {}
+        
+        const freshCleanData = getCleanSlateData();
+        setData(freshCleanData);
+        setShowResetModal(false);
+        setActiveTab('home');
+        setSubView(null);
+        triggerToast('App reset to clean slate! XP, levels & achievements wiped.');
+      };
+
+      return (
+        <div class="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900 border-x border-slate-200 dark:border-slate-800 shadow-2xl relative pb-20">
+          
+          {/* Toast Notification */}
+          {toastMsg && (
+            <div class="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 dark:bg-slate-100/90 text-white dark:text-slate-900 px-4 py-2.5 rounded-full text-xs font-semibold shadow-xl backdrop-blur-md flex items-center gap-2 animate-bounce">
+              <span>⚡</span> {toastMsg}
+            </div>
+          )}
+
+          {/* Level Up Celebration Modal */}
+          {levelUpModal && (
+            <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm text-center space-y-4 shadow-2xl border border-amber-500/30 relative overflow-hidden animate-in zoom-in-95 duration-200">
+                <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                  {Array.from({ length: 15 }).map((_, i) => (
+                    <div key={i} class="animate-confetti" style={{
+                      left: `${Math.random() * 100}%`,
+                      backgroundColor: ['#f59e0b', '#3b82f6', '#10b981', '#ec4899'][i % 4],
+                      animationDelay: `${Math.random() * 2}s`
+                    }} />
+                  ))}
+                </div>
+
+                <div class="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white flex items-center justify-center text-4xl shadow-lg shadow-amber-500/40 animate-bounce">
+                  {levelUpModal.badge}
+                </div>
+
+                <div>
+                  <span class="text-xs font-black uppercase tracking-widest text-amber-500">LEVEL UP REWARD!</span>
+                  <h2 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                    Reached Level {levelUpModal.newLevel}
+                  </h2>
+                  <p class="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1">
+                    Title Unlocked: <span class="text-amber-500 font-extrabold">{levelUpModal.title}</span>
+                  </p>
+                </div>
+
+                <div class="p-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-xs text-slate-600 dark:text-slate-300 font-medium">
+                  🎉 You are advancing faster! Enjoy increased XP multipliers and bragging rights.
+                </div>
+
+                <button 
+                  onClick={() => setLevelUpModal(null)} 
+                  class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-xs rounded-2xl shadow-lg shadow-amber-500/30 active:scale-95 transition-all"
+                >
+                  Claim & Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Top Header */}
+          <header class="px-5 pt-safe pt-4 pb-3 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-30">
+            <div>
+              <p class="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Everyday Shell</p>
+              <h1 class="text-xl font-black tracking-tight flex items-center gap-2">
+                {activeTab === 'home' && 'Today'}
+                {activeTab === 'fitness' && 'Fitness Studio'}
+                {activeTab === 'stats' && 'Sleep & Body'}
+                {activeTab === 'challenges' && 'Goals & XP'}
+                {activeTab === 'more' && (subView ? subView.toUpperCase() : 'Hub')}
+              </h1>
+            </div>
+            
+            <div class="flex items-center gap-2">
+              <div class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                <Icon name="flame" classNames="w-3.5 h-3.5 text-amber-500" />
+                <span>{data.streak} Days {xpMultiplier > 1 ? `(${xpMultiplier}x XP)` : ''}</span>
+              </div>
+              <button onClick={toggleTheme} class="p-2 rounded-2xl bg-slate-200/60 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:scale-105 active:scale-95 transition-all">
+                <Icon name={data.theme === 'dark' ? 'sun' : 'moon'} classNames="w-4 h-4" />
+              </button>
+            </div>
+          </header>
+
+          {/* Views Routing */}
+          <main class="flex-1 p-4 space-y-4 overflow-y-auto">
+            {activeTab === 'home' && (
+              <HomeView 
+                data={data} 
+                levelInfo={levelInfo}
+                xpMultiplier={xpMultiplier}
+                onWaterAdd={handleWaterAdd} 
+                onToggleChallenge={toggleChallenge}
+                onClaimAchievement={handleClaimAchievement}
+                onNav={setActiveTab}
+                onSubNav={(view) => { setActiveTab('more'); setSubView(view); }}
+              />
+            )}
+            
+            {activeTab === 'fitness' && (
+              <FitnessView data={data} setData={setData} addXpWithMultiplier={addXpWithMultiplier} triggerToast={triggerToast} />
+            )}
+            
+            {activeTab === 'stats' && (
+              <StatsView data={data} setData={setData} triggerToast={triggerToast} />
+            )}
+            
+            {activeTab === 'challenges' && (
+              <ChallengesView 
+                data={data} 
+                setData={setData}
+                levelInfo={levelInfo}
+                onToggleChallenge={toggleChallenge} 
+                triggerToast={triggerToast}
+              />
+            )}
+            
+            {activeTab === 'more' && !subView && (
+              <MoreMenu 
+                onSelectSubView={(view) => setSubView(view)} 
+                onOpenReset={() => setShowResetModal(true)} 
+              />
+            )}
+            
+            {activeTab === 'more' && subView === 'calculator' && (
+              <UnitCalculatorView onBack={() => setSubView(null)} triggerToast={triggerToast} />
+            )}
+            
+            {activeTab === 'more' && subView === 'calendar' && (
+              <CalendarView data={data} setData={setData} onBack={() => setSubView(null)} triggerToast={triggerToast} />
+            )}
+            
+            {activeTab === 'more' && subView === 'achievements' && (
+              <AchievementsView data={data} onClaimAchievement={handleClaimAchievement} onBack={() => setSubView(null)} />
+            )}
+            
+            {activeTab === 'more' && subView === 'settings' && (
+              <SettingsView 
+                data={data} 
+                setData={setData} 
+                onBack={() => setSubView(null)} 
+                onOpenReset={() => setShowResetModal(true)} 
+                triggerToast={triggerToast}
+              />
+            )}
+          </main>
+
+          {/* Reset Confirmation Modal */}
+          {showResetModal && (
+            <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-4">
+              <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-200 dark:border-slate-700 animate-in fade-in zoom-in-95 duration-150">
+                <div class="w-12 h-12 rounded-2xl bg-red-500/10 text-red-500 flex items-center justify-center text-2xl font-bold">⚠️</div>
+                <div>
+                  <h3 class="text-lg font-bold text-slate-900 dark:text-white">Factory Reset App?</h3>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    This will permanently wipe all logs, workout records, XP progress, and unlocked achievements.
+                  </p>
+                </div>
+                <div class="flex gap-3 pt-2">
+                  <button onClick={() => setShowResetModal(false)} class="flex-1 py-3 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200">
+                    Cancel
+                  </button>
+                  <button onClick={handleFactoryReset} class="flex-1 py-3 text-xs font-semibold rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25 active:scale-95 transition-all">
+                    Reset Everything
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Navigation */}
+          <nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800/80 px-2 py-2 flex justify-around items-center z-40 pb-safe">
+            {[
+              { id: 'home', label: 'Today', icon: 'home' },
+              { id: 'fitness', label: 'Fitness', icon: 'dumbbell' },
+              { id: 'stats', label: 'Stats', icon: 'stats' },
+              { id: 'challenges', label: 'Goals', icon: 'target' },
+              { id: 'more', label: 'More', icon: 'grid' }
+            ].map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => { playSound('pop'); setActiveTab(tab.id); setSubView(null); }}
+                  class={`flex flex-col items-center py-1 px-3 rounded-2xl transition-all duration-200 ${
+                    isActive ? 'text-blue-600 dark:text-blue-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                  }`}
+                >
+                  <Icon name={tab.icon} classNames="w-5 h-5" />
+                  <span class="text-[10px] mt-1 tracking-tight">{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+        </div>
+      );
+    }
+
+    function HomeView({ data, levelInfo, xpMultiplier, onWaterAdd, onToggleChallenge, onClaimAchievement, onNav, onSubNav }) {
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      const todayNote = data.dailyNotes[todayDateStr] || data.dailyNotes['2026-10-07'];
+
+      const claimableAchievements = data.achievements.filter(a => a.unlocked && !a.claimed);
+
+      return (
+        <div class="space-y-4">
+          
+          {/* Level & XP Hero Card with Dynamic Ranks */}
+          <div class={`p-5 rounded-3xl bg-gradient-to-br ${levelInfo.color} text-white shadow-xl relative overflow-hidden transition-all duration-300`}>
+            <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+            
+            <div class="flex justify-between items-start relative z-10">
+              <div>
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider bg-white/20 backdrop-blur-md text-white flex items-center gap-1.5 w-fit">
+                  <span>{levelInfo.badge}</span> Level {levelInfo.level} • {levelInfo.title}
+                </span>
+                <h2 class="text-3xl font-black mt-2 tracking-tight">{data.xp.toLocaleString()} <span class="text-xs font-semibold opacity-80">TOTAL XP</span></h2>
+              </div>
+
+              <div class="text-right">
+                <span class="text-[10px] text-blue-100 font-medium block">Active Streak</span>
+                <span class="text-base font-black text-amber-300 flex items-center justify-end gap-1 mt-0.5">
+                  ⚡ {data.streak} Days
+                </span>
+                {xpMultiplier > 1 && (
+                  <span class="text-[9px] font-extrabold bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded-md inline-block mt-0.5">
+                    {xpMultiplier}x XP Boost
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Level XP Progress */}
+            <div class="mt-4 space-y-1 relative z-10">
+              <div class="flex justify-between text-[11px] text-blue-100 font-medium">
+                <span>Progress to Level {levelInfo.level + 1}</span>
+                <span>{levelInfo.currentLevelXp} / {levelInfo.reqXp} XP ({Math.round(levelInfo.progressPercent)}%)</span>
+              </div>
+              <div class="w-full bg-black/25 h-3 rounded-full p-0.5 overflow-hidden backdrop-blur-sm">
+                <div class="bg-gradient-to-r from-amber-300 to-emerald-400 h-full rounded-full transition-all duration-500 shadow-sm" style={{ width: `${levelInfo.progressPercent}%` }}></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Pending Achievement Claims Notification Banner */}
+          {claimableAchievements.length > 0 && (
+            <div class="p-4 rounded-3xl bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg flex items-center justify-between animate-bounce">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">🎁</span>
+                <div>
+                  <h4 class="font-black text-xs uppercase tracking-wider">Rewards Ready!</h4>
+                  <p class="text-[11px] font-bold opacity-90">{claimableAchievements.length} achievement(s) completed!</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => onSubNav('achievements')}
+                class="px-3 py-1.5 bg-white text-slate-900 rounded-xl text-xs font-black shadow-md hover:scale-105 active:scale-95 transition-all"
+              >
+                Claim XP
+              </button>
+            </div>
+          )}
+
+          {/* Daily Quick Stats Grid */}
+          <div class="grid grid-cols-2 gap-3">
+            {/* Water Tracker Card */}
+            <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between shadow-sm">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <Icon name="water" classNames="w-4 h-4 text-blue-500" /> Hydration
+                </span>
+                <span class="text-xs font-bold text-blue-500">
+                  {Math.round((data.waterGlassCount / data.waterTarget) * 100)}%
+                </span>
+              </div>
+
+              <div class="my-3">
+                <div class="text-2xl font-black tracking-tight">
+                  {data.waterGlassCount} <span class="text-xs font-normal text-slate-400">/ {data.waterTarget} glasses</span>
+                </div>
+                {/* Visual Glass Dots */}
+                <div class="flex gap-1 mt-2">
+                  {Array.from({ length: data.waterTarget }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      class={`h-1.5 flex-1 rounded-full transition-all ${
+                        i < data.waterGlassCount ? 'bg-blue-500 shadow-sm shadow-blue-500/50' : 'bg-slate-200 dark:bg-slate-700'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div class="flex gap-1.5 pt-1">
+                <button onClick={() => onWaterAdd(1)} class="flex-1 py-2 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-blue-500/20">
+                  + 1 Glass
+                </button>
+                <button onClick={() => onWaterAdd(-1)} class="px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl text-xs font-bold">
+                  -
+                </button>
+              </div>
+            </div>
+
+            {/* Sleep Summary Card */}
+            <div onClick={() => onNav('stats')} class="p-4 rounded-3xl bg-white dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between shadow-sm cursor-pointer hover:border-indigo-500/50 transition-all">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <Icon name="moon" classNames="w-4 h-4 text-indigo-400" /> Sleep
+                </span>
+                <span class={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  parseFloat(data.sleep.duration) > 0 ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 bg-slate-500/10'
+                }`}>
+                  {parseFloat(data.sleep.duration) > 0 ? 'Logged' : 'Not Logged'}
+                </span>
+              </div>
+
+              <div class="my-3">
+                <div class="text-2xl font-black tracking-tight">
+                  {parseFloat(data.sleep.duration) > 0 ? data.sleep.duration : '--'} <span class="text-xs font-normal text-slate-400">hrs</span>
+                </div>
+                <div class="text-xs text-amber-400 mt-1 font-semibold flex items-center gap-0.5">
+                  {data.sleep.quality > 0 ? (
+                    <>{'★'.repeat(data.sleep.quality)}<span class="text-slate-300 dark:text-slate-600">{'★'.repeat(5 - data.sleep.quality)}</span></>
+                  ) : (
+                    <span class="text-slate-400 text-[11px] font-normal">No rating set</span>
+                  )}
+                </div>
+              </div>
+
+              <span class="text-[11px] font-semibold text-indigo-500 dark:text-indigo-400 flex items-center justify-between">
+                <span>Bed: {data.sleep.bedtime || '--:--'}</span>
+                <span>→</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Shortcuts Bar */}
+          <div class="grid grid-cols-4 gap-2">
+            {[
+              { label: 'Workout', icon: 'dumbbell', action: () => onNav('fitness'), color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' },
+              { label: 'Converter', icon: 'calc', action: () => onSubNav('calculator'), color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' },
+              { label: 'Calendar', icon: 'calendar', action: () => onSubNav('calendar'), color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' },
+              { label: 'Badges', icon: 'trophy', action: () => onSubNav('achievements'), color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' }
+            ].map((s, idx) => (
+              <button key={idx} onClick={s.action} class={`p-3 rounded-2xl border ${s.color} flex flex-col items-center justify-center hover:scale-105 active:scale-95 transition-all`}>
+                <Icon name={s.icon} classNames="w-5 h-5 mb-1" />
+                <span class="text-[10px] font-bold">{s.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Today's Focus Challenges */}
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between px-1">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Today's Focus Tasks</h3>
+              <button onClick={() => onNav('challenges')} class="text-xs text-blue-500 font-bold">View All ({data.challenges.length})</button>
+            </div>
+
+            {data.challenges.slice(0, 3).map(c => (
+              <div 
+                key={c.id} 
+                onClick={() => onToggleChallenge(c.id)} 
+                class="p-4 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:border-blue-500/40 transition-all shadow-sm"
+              >
+                <div class="flex items-center gap-3">
+                  <div class={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+                    c.done ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30' : 'border border-slate-300 dark:border-slate-600'
+                  }`}>
+                    {c.done && <Icon name="check" classNames="w-4 h-4 stroke-[3]" />}
+                  </div>
+                  <span class={`text-xs font-bold ${c.done ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                    {c.title}
+                  </span>
+                </div>
+                <span class="text-[11px] font-extrabold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                  +{Math.round(c.xp * xpMultiplier)} XP
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Today's Journal Note Preview */}
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-2 shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <Icon name="note" classNames="w-4 h-4 text-purple-400" /> Daily Journal Log
+              </span>
+              <button onClick={() => onSubNav('calendar')} class="text-xs text-blue-500 font-bold">Edit Log</button>
+            </div>
+            <p class="text-xs text-slate-600 dark:text-slate-300 italic leading-relaxed">
+              {todayNote ? `"${todayNote.text}" ${todayNote.mood}` : 'No journal entry logged yet for today. Click edit to record your thoughts.'}
+            </p>
+          </div>
+
+        </div>
+      );
+    }
+
+    function FitnessView({ data, setData, addXpWithMultiplier, triggerToast }) {
+      const [showNewModal, setShowNewModal] = useState(false);
+      const [workoutName, setWorkoutName] = useState('Strength Workout');
+      const [exerciseInput, setExerciseInput] = useState('');
+      const [setsInput, setSetsInput] = useState('3');
+      const [weightInput, setWeightInput] = useState('60');
+      const [repsInput, setRepsInput] = useState('10');
+      const [currentExercises, setCurrentExercises] = useState([]);
+      const [restTimer, setRestTimer] = useState(0);
+
+      useEffect(() => {
+        let interval = null;
+        if (restTimer > 0) {
+          interval = setInterval(() => {
+            setRestTimer(prev => {
+              if (prev <= 1) {
+                playSound('pop');
+                triggerToast('Rest timer finished!');
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        }
+        return () => clearInterval(interval);
+      }, [restTimer]);
+
+      const handleAddExercise = () => {
+        if (!exerciseInput.trim()) return;
+        playSound('pop');
+        const numSets = parseInt(setsInput) || 3;
+        const w = parseFloat(weightInput) || 0;
+        const r = parseInt(repsInput) || 10;
+
+        const setsArray = Array.from({ length: numSets }).map(() => ({ weight: w, reps: r }));
+
+        setCurrentExercises(prev => [...prev, { name: exerciseInput.trim(), sets: setsArray }]);
+        setExerciseInput('');
+      };
+
+      const handleSaveWorkout = () => {
+        if (currentExercises.length === 0) return;
+        playSound('success');
+
+        let totalVol = 0;
+        currentExercises.forEach(ex => {
+          ex.sets.forEach(s => {
+            totalVol += (s.weight * s.reps);
+          });
+        });
+
+        const newWorkout = {
+          id: 'w_' + Date.now(),
+          name: workoutName,
+          date: new Date().toISOString().split('T')[0],
+          volume: Math.round(totalVol),
+          exercises: currentExercises
+        };
+
+        const gained = addXpWithMultiplier(150);
+
+        setData(prev => ({
+          ...prev,
+          workouts: [newWorkout, ...prev.workouts]
+        }));
+
+        setCurrentExercises([]);
+        setShowNewModal(false);
+        triggerToast(`Workout saved! (+${gained} XP)`);
+      };
+
+      return (
+        <div class="space-y-4">
+          
+          <div class="p-5 rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex justify-between items-center shadow-lg shadow-emerald-500/20">
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-200">Fitness Studio</span>
+              <h3 class="text-xl font-black mt-0.5">{data.workouts.length} Workouts Logged</h3>
+              <p class="text-xs text-emerald-100 mt-1">Total Volume: {data.workouts.reduce((acc, w) => acc + w.volume, 0).toLocaleString()} kg</p>
+            </div>
+            <button 
+              onClick={() => { playSound('pop'); setShowNewModal(true); }}
+              class="px-4 py-2.5 bg-white text-emerald-800 rounded-2xl text-xs font-black shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-1"
+            >
+              <Icon name="plus" classNames="w-4 h-4 stroke-[3]" /> Log New
+            </button>
+          </div>
+
+          {restTimer > 0 && (
+            <div class="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex justify-between items-center animate-pulse">
+              <span class="text-xs font-bold text-amber-500 flex items-center gap-2">
+                <Icon name="clock" classNames="w-4 h-4" /> Rest Timer Active: {restTimer}s
+              </span>
+              <button onClick={() => setRestTimer(0)} class="text-xs text-red-500 font-bold px-2 py-1">Skip</button>
+            </div>
+          )}
+
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">Recent Sessions</h3>
+            {data.workouts.map(w => (
+              <div key={w.id} class="p-4 rounded-3xl bg-white dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+                <div class="flex justify-between items-start">
+                  <div>
+                    <h4 class="font-black text-sm text-slate-900 dark:text-white">{w.name}</h4>
+                    <p class="text-[11px] text-slate-400">{w.date}</p>
+                  </div>
+                  <span class="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                    ⚡ {w.volume.toLocaleString()} kg
+                  </span>
+                </div>
+
+                <div class="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                  {w.exercises.map((ex, idx) => (
+                    <div key={idx} class="flex justify-between text-xs">
+                      <span class="font-medium text-slate-700 dark:text-slate-300">{ex.name}</span>
+                      <span class="text-slate-400">{ex.sets.length} sets ({ex.sets[0]?.weight || 0}kg x {ex.sets[0]?.reps || 0}r)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {showNewModal && (
+            <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+              <div class="bg-white dark:bg-slate-800 rounded-3xl p-5 w-full max-w-md space-y-4 shadow-2xl border border-slate-200 dark:border-slate-700 max-h-[85vh] overflow-y-auto">
+                <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-3">
+                  <h3 class="text-base font-bold">Record Workout Session</h3>
+                  <button onClick={() => setShowNewModal(false)} class="text-xs text-slate-400 hover:text-slate-600 font-bold">✕ Close</button>
+                </div>
+
+                <div>
+                  <label class="text-[10px] font-bold text-slate-400 uppercase">Workout Name</label>
+                  <input 
+                    type="text" 
+                    value={workoutName} 
+                    onChange={e => setWorkoutName(e.target.value)}
+                    class="w-full mt-1 p-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 border-none font-semibold text-xs text-slate-900 dark:text-slate-100"
+                  />
+                </div>
+
+                <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <span class="text-xs font-bold text-slate-500">Add Exercise</span>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Bench Press" 
+                    value={exerciseInput}
+                    onChange={e => setExerciseInput(e.target.value)}
+                    class="w-full p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium"
+                  />
+                  <div class="grid grid-cols-3 gap-2">
+                    <div>
+                      <span class="text-[9px] font-bold text-slate-400">Sets</span>
+                      <input type="number" value={setsInput} onChange={e => setSetsInput(e.target.value)} class="w-full p-2 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold text-center" />
+                    </div>
+                    <div>
+                      <span class="text-[9px] font-bold text-slate-400">Weight (kg)</span>
+                      <input type="number" value={weightInput} onChange={e => setWeightInput(e.target.value)} class="w-full p-2 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold text-center" />
+                    </div>
+                    <div>
+                      <span class="text-[9px] font-bold text-slate-400">Reps</span>
+                      <input type="number" value={repsInput} onChange={e => setRepsInput(e.target.value)} class="w-full p-2 rounded-xl bg-white dark:bg-slate-800 text-xs font-bold text-center" />
+                    </div>
+                  </div>
+                  <button onClick={handleAddExercise} class="w-full py-2 bg-slate-800 dark:bg-slate-700 text-white text-xs font-bold rounded-xl">+ Add to Routine</button>
+                </div>
+
+                {currentExercises.length > 0 && (
+                  <div class="space-y-2">
+                    <span class="text-xs font-bold text-slate-400">Added Exercises:</span>
+                    {currentExercises.map((ex, i) => (
+                      <div key={i} class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/40 text-xs flex justify-between items-center">
+                        <span class="font-bold">{ex.name}</span>
+                        <span class="text-slate-400">{ex.sets.length} sets × {ex.sets[0].weight}kg</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div class="pt-1">
+                  <span class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Start Rest Timer</span>
+                  <div class="flex gap-2">
+                    {[30, 60, 90].map(s => (
+                      <button key={s} onClick={() => { setRestTimer(s); playSound('pop'); }} class="px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold">
+                        ⏱️ {s}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div class="flex gap-2 pt-3">
+                  <button onClick={() => setShowNewModal(false)} class="flex-1 py-3 text-xs font-bold rounded-2xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                    Cancel
+                  </button>
+                  <button onClick={handleSaveWorkout} class="flex-1 py-3 text-xs font-bold rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/25">
+                    Finish & Log Workout
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    function StatsView({ data, setData, triggerToast }) {
+      const [bedtime, setBedtime] = useState(data.sleep.bedtime || '23:00');
+      const [wakeTime, setWakeTime] = useState(data.sleep.wakeTime || '07:00');
+      const [quality, setQuality] = useState(data.sleep.quality || 0);
+      const [weightInput, setWeightInput] = useState(data.bodyStats.weight ? data.bodyStats.weight.toString() : '');
+      const [fatInput, setFatInput] = useState(data.bodyStats.bodyFat ? data.bodyStats.bodyFat.toString() : '');
+
+      const handleSaveSleep = () => {
+        playSound('pop');
+        const [bh, bm] = bedtime.split(':').map(Number);
+        const [wh, wm] = wakeTime.split(':').map(Number);
+        let durationHrs = (wh + wm / 60) - (bh + bm / 60);
+        if (durationHrs < 0) durationHrs += 24;
+
+        const dateStr = new Date().toISOString().split('T')[0];
+        const newHistory = [...data.sleep.history.filter(h => h.date !== dateStr), { date: dateStr, duration: parseFloat(durationHrs.toFixed(1)) }];
+
+        setData(prev => ({
+          ...prev,
+          sleep: {
+            ...prev.sleep,
+            bedtime,
+            wakeTime,
+            quality: quality || 3,
+            duration: durationHrs.toFixed(1),
+            history: newHistory
+          }
+        }));
+        triggerToast('Sleep metrics updated!');
+      };
+
+      const handleSaveBody = () => {
+        playSound('success');
+        const w = parseFloat(weightInput) || 0;
+        const f = parseFloat(fatInput) || 0;
+
+        const newEntry = { date: new Date().toISOString().split('T')[0], weight: w, bodyFat: f };
+
+        setData(prev => ({
+          ...prev,
+          bodyStats: {
+            ...prev.bodyStats,
+            weight: w,
+            bodyFat: f,
+            history: [...prev.bodyStats.history, newEntry]
+          }
+        }));
+        triggerToast('Body measurements recorded!');
+      };
+
+      return (
+        <div class="space-y-4">
+          
+          <div class="grid grid-cols-2 gap-3">
+            <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Current Weight</span>
+              <p class="text-2xl font-black mt-1 text-slate-900 dark:text-white">
+                {data.bodyStats.weight || '--'} <span class="text-xs font-normal text-slate-400">kg</span>
+              </p>
+              <div class="mt-2 text-[10px] text-emerald-500 font-bold">
+                Goal: {data.bodyStats.weightGoal ? `${data.bodyStats.weightGoal} kg` : 'Not set'}
+              </div>
+            </div>
+
+            <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 shadow-sm">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Body Fat %</span>
+              <p class="text-2xl font-black mt-1 text-slate-900 dark:text-white">
+                {data.bodyStats.bodyFat || '--'} <span class="text-xs font-normal text-slate-400">%</span>
+              </p>
+              <div class="mt-2 text-[10px] text-slate-400 font-medium">
+                Waist: {data.bodyStats.waist ? `${data.bodyStats.waist} cm` : 'Not set'}
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Record Body Metrics</h4>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400">Weight (kg)</span>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 70.0"
+                  value={weightInput} 
+                  onChange={e => setWeightInput(e.target.value)} 
+                  class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-slate-400">Body Fat %</span>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 15.0"
+                  value={fatInput} 
+                  onChange={e => setFatInput(e.target.value)} 
+                  class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+            <button onClick={handleSaveBody} class="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20">
+              Update Weight & Body Fat
+            </button>
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Icon name="moon" classNames="w-4 h-4 text-indigo-400" /> Sleep Duration Calculator
+            </h4>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <span class="text-[10px] font-bold text-slate-400">Bedtime</span>
+                <input 
+                  type="time" 
+                  value={bedtime} 
+                  onChange={e => setBedtime(e.target.value)}
+                  class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <span class="text-[10px] font-bold text-slate-400">Wake Up</span>
+                <input 
+                  type="time" 
+                  value={wakeTime} 
+                  onChange={e => setWakeTime(e.target.value)}
+                  class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold text-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-bold text-slate-400">Sleep Quality Rating</span>
+              <div class="flex gap-2 mt-1">
+                {[1, 2, 3, 4, 5].map(star => (
+                  <button 
+                    key={star} 
+                    onClick={() => setQuality(star)}
+                    class={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-all ${
+                      quality >= star ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' : 'bg-slate-100 dark:bg-slate-700/30 border-transparent text-slate-400'
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={handleSaveSleep} class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20">
+              Calculate & Save Sleep
+            </button>
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">7-Day Sleep Duration Trend</h4>
+            
+            {data.sleep.history.length === 0 ? (
+              <div class="py-8 text-center text-slate-400 text-xs font-medium">
+                No sleep records logged yet. Calculate & save sleep above to start tracking trends!
+              </div>
+            ) : (
+              <div class="h-32 flex items-end justify-between gap-2 pt-4 px-2 border-b border-slate-100 dark:border-slate-700/60 pb-2">
+                {data.sleep.history.map((item, idx) => {
+                  const heightPercent = Math.min(100, (item.duration / 10) * 100);
+                  return (
+                    <div key={idx} class="flex-1 flex flex-col items-center gap-1 group">
+                      <span class="text-[9px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity">{item.duration}h</span>
+                      <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-t-lg h-24 flex items-end overflow-hidden">
+                        <div 
+                          class="w-full bg-indigo-500 rounded-t-lg transition-all duration-500" 
+                          style={{ height: `${heightPercent}%` }}
+                        />
+                      </div>
+                      <span class="text-[9px] font-medium text-slate-400">{item.date.split(' ')[1] || item.date}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+      );
+    }
+
+    function ChallengesView({ data, setData, levelInfo, onToggleChallenge, triggerToast }) {
+      const [filter, setFilter] = useState('all');
+      const [showAddModal, setShowAddModal] = useState(false);
+      const [newTitle, setNewTitle] = useState('');
+      const [newXp, setNewXp] = useState('50');
+
+      const handleAddCustomChallenge = () => {
+        if (!newTitle.trim()) return;
+        playSound('pop');
+        const xpVal = parseInt(newXp) || 50;
+
+        const newC = {
+          id: 'c_' + Date.now(),
+          title: newTitle.trim(),
+          xp: xpVal,
+          done: false,
+          category: 'daily'
+        };
+
+        setData(prev => ({
+          ...prev,
+          challenges: [...prev.challenges, newC]
+        }));
+
+        setNewTitle('');
+        setShowAddModal(false);
+        triggerToast('Custom goal created!');
+      };
+
+      const filtered = data.challenges.filter(c => filter === 'all' || c.category === filter);
+
+      return (
+        <div class="space-y-4">
+          
+          <div class={`p-5 rounded-3xl bg-gradient-to-r ${levelInfo.color} text-white shadow-lg flex justify-between items-center`}>
+            <div>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-white/80">Rank: {levelInfo.title}</span>
+              <h3 class="text-2xl font-black">{data.xp.toLocaleString()} XP</h3>
+            </div>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              class="px-3.5 py-2 bg-white text-slate-900 rounded-2xl text-xs font-black shadow-md hover:scale-105 transition-all"
+            >
+              + Custom Goal
+            </button>
+          </div>
+
+          <div class="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+            {['all', 'daily', 'weekly'].map(cat => (
+              <button 
+                key={cat} 
+                onClick={() => setFilter(cat)}
+                class={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                  filter === cat ? 'bg-blue-500 text-white' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          <div class="space-y-2.5">
+            {filtered.map(c => (
+              <div 
+                key={c.id} 
+                onClick={() => onToggleChallenge(c.id)} 
+                class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:border-amber-500/40 transition-all shadow-sm"
+              >
+                <div class="flex items-center gap-3">
+                  <div class={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+                    c.done ? 'bg-emerald-500 text-white' : 'border border-slate-300 dark:border-slate-600'
+                  }`}>
+                    {c.done && <Icon name="check" classNames="w-4 h-4 stroke-[3]" />}
+                  </div>
+                  <div>
+                    <p class={`text-xs font-bold ${c.done ? 'line-through text-slate-400' : 'text-slate-900 dark:text-slate-100'}`}>
+                      {c.title}
+                    </p>
+                    <span class="text-[9px] uppercase font-bold text-slate-400">{c.category}</span>
+                  </div>
+                </div>
+                <span class="text-xs font-black text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                  +{c.xp} XP
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {showAddModal && (
+            <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div class="bg-white dark:bg-slate-800 rounded-3xl p-5 w-full max-w-sm space-y-4 shadow-2xl border border-slate-200 dark:border-slate-700">
+                <h3 class="text-base font-bold">Add Custom Challenge</h3>
+                <div>
+                  <span class="text-[10px] font-bold text-slate-400">Goal Description</span>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Read 15 pages" 
+                    value={newTitle} 
+                    onChange={e => setNewTitle(e.target.value)}
+                    class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <span class="text-[10px] font-bold text-slate-400">XP Reward</span>
+                  <input 
+                    type="number" 
+                    value={newXp} 
+                    onChange={e => setNewXp(e.target.value)}
+                    class="w-full mt-1 p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold"
+                  />
+                </div>
+                <div class="flex gap-2 pt-2">
+                  <button onClick={() => setShowAddModal(false)} class="flex-1 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-xs font-bold">Cancel</button>
+                  <button onClick={handleAddCustomChallenge} class="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-xs font-bold">Create Goal</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    function MoreMenu({ onSelectSubView, onOpenReset }) {
+      const items = [
+        { id: 'calculator', name: 'Everyday Unit Converter', icon: 'calc', desc: 'Kitchen volume, weight & length' },
+        { id: 'calendar', name: 'Calendar & Notes Log', icon: 'calendar', desc: 'Interactive schedule & daily journal' },
+        { id: 'achievements', name: 'Achievements Gallery', icon: 'trophy', desc: 'Unlocked badges & milestones' },
+        { id: 'settings', name: 'App Settings & Backup', icon: 'settings', desc: 'Targets, export/import JSON & reset' }
+      ];
+
+      return (
+        <div class="space-y-3">
+          {items.map(item => (
+            <button 
+              key={item.id} 
+              onClick={() => { playSound('pop'); onSelectSubView(item.id); }}
+              class="w-full p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-left hover:border-blue-500/40 transition-all shadow-sm"
+            >
+              <div class="flex items-center gap-3.5">
+                <div class="p-3 rounded-2xl bg-blue-500/10 text-blue-500">
+                  <Icon name={item.icon} classNames="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 class="font-bold text-sm text-slate-900 dark:text-white">{item.name}</h4>
+                  <p class="text-xs text-slate-400">{item.desc}</p>
+                </div>
+              </div>
+              <span class="text-slate-400 text-sm font-bold">→</span>
+            </button>
+          ))}
+
+          {/* Direct Quick Reset Button in Hub */}
+          <button 
+            onClick={onOpenReset}
+            class="w-full p-4 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-between text-left hover:bg-red-500/20 transition-all shadow-sm"
+          >
+            <div class="flex items-center gap-3.5">
+              <div class="p-3 rounded-2xl bg-red-500/20 text-red-500">
+                <Icon name="trash" classNames="w-5 h-5" />
+              </div>
+              <div>
+                <h4 class="font-bold text-sm text-red-500">Factory Reset App</h4>
+                <p class="text-xs text-slate-400">Restore fresh default data state</p>
+              </div>
+            </div>
+            <span class="text-red-500 text-sm font-bold">⚠️</span>
+          </button>
+        </div>
+      );
+    }
+
+    function UnitCalculatorView({ onBack, triggerToast }) {
+      const [val, setVal] = useState(1);
+      const [cat, setCat] = useState('kitchen');
+
+      return (
+        <div class="space-y-4">
+          <button onClick={onBack} class="text-xs font-bold text-blue-500 flex items-center gap-1">
+            <Icon name="arrowLeft" classNames="w-4 h-4" /> Back to Hub
+          </button>
+
+          <div class="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+            {['kitchen', 'length', 'weight', 'temp'].map(c => (
+              <button 
+                key={c} 
+                onClick={() => setCat(c)}
+                class={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                  cat === c ? 'bg-blue-500 text-white' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">Input Value</span>
+            <input 
+              type="number" 
+              value={val} 
+              onChange={e => setVal(Number(e.target.value))} 
+              class="w-full p-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 border-none font-black text-2xl text-slate-900 dark:text-white"
+            />
+          </div>
+
+          <div class="space-y-2">
+            {cat === 'kitchen' && (
+              <>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Tablespoons (tbsp)</span><span class="font-black text-sm text-blue-500">{(val * 16).toFixed(1)} tbsp</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Teaspoons (tsp)</span><span class="font-black text-sm text-blue-500">{(val * 48).toFixed(1)} tsp</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Fluid Ounces (fl oz)</span><span class="font-black text-sm text-blue-500">{(val * 8).toFixed(1)} fl oz</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Milliliters (ml)</span><span class="font-black text-sm text-blue-500">{(val * 236.588).toFixed(1)} ml</span></div>
+              </>
+            )}
+            {cat === 'length' && (
+              <>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Inches (in)</span><span class="font-black text-sm text-blue-500">{(val * 39.3701).toFixed(1)} in</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Feet (ft)</span><span class="font-black text-sm text-blue-500">{(val * 3.28084).toFixed(2)} ft</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Centimeters (cm)</span><span class="font-black text-sm text-blue-500">{(val * 100).toFixed(1)} cm</span></div>
+              </>
+            )}
+            {cat === 'weight' && (
+              <>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Pounds (lbs)</span><span class="font-black text-sm text-blue-500">{(val * 2.20462).toFixed(2)} lbs</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Ounces (oz)</span><span class="font-black text-sm text-blue-500">{(val * 35.274).toFixed(1)} oz</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Grams (g)</span><span class="font-black text-sm text-blue-500">{(val * 1000).toFixed(0)} g</span></div>
+              </>
+            )}
+            {cat === 'temp' && (
+              <>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Fahrenheit (°F)</span><span class="font-black text-sm text-blue-500">{((val * 9/5) + 32).toFixed(1)} °F</span></div>
+                <div class="p-3.5 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 flex justify-between items-center"><span class="text-xs font-bold text-slate-500">Kelvin (K)</span><span class="font-black text-sm text-blue-500">{(val + 273.15).toFixed(1)} K</span></div>
+              </>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function CalendarView({ data, setData, onBack, triggerToast }) {
+      const [selectedDay, setSelectedDay] = useState(7);
+      const [noteText, setNoteText] = useState('');
+      const [selectedMood, setSelectedMood] = useState('😊');
+
+      const fullDateStr = `2026-10-${selectedDay < 10 ? '0' + selectedDay : selectedDay}`;
+
+      useEffect(() => {
+        const existing = data.dailyNotes[fullDateStr];
+        if (existing) {
+          setNoteText(existing.text || '');
+          setSelectedMood(existing.mood || '😊');
+        } else {
+          setNoteText('');
+        }
+      }, [selectedDay]);
+
+      const handleSaveNote = () => {
+        playSound('success');
+        setData(prev => ({
+          ...prev,
+          dailyNotes: {
+            ...prev.dailyNotes,
+            [fullDateStr]: { text: noteText, mood: selectedMood }
+          }
+        }));
+        triggerToast('Daily note saved!');
+      };
+
+      return (
+        <div class="space-y-4">
+          <button onClick={onBack} class="text-xs font-bold text-blue-500 flex items-center gap-1">
+            <Icon name="arrowLeft" classNames="w-4 h-4" /> Back to Hub
+          </button>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <div class="flex justify-between items-center px-1">
+              <span class="text-xs font-bold text-slate-900 dark:text-white">October 2026</span>
+              <span class="text-[10px] text-slate-400 font-bold">31 Days</span>
+            </div>
+
+            <div class="grid grid-cols-7 gap-1 text-center text-xs">
+              {['S','M','T','W','T','F','S'].map((d, i) => (
+                <span key={i} class="text-slate-400 font-bold text-[10px] py-1">{d}</span>
+              ))}
+              {Array.from({ length: 31 }).map((_, i) => {
+                const dayNum = i + 1;
+                const dStr = `2026-10-${dayNum < 10 ? '0' + dayNum : dayNum}`;
+                const hasNote = Boolean(data.dailyNotes[dStr]);
+                const isSelected = selectedDay === dayNum;
+
+                return (
+                  <button 
+                    key={i} 
+                    onClick={() => setSelectedDay(dayNum)}
+                    class={`py-2 rounded-xl text-xs font-bold relative transition-all ${
+                      isSelected ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30 scale-105' : 'bg-slate-100 dark:bg-slate-700/30 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {dayNum}
+                    {hasNote && <span class="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-amber-400 rounded-full"></span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-bold text-slate-400 uppercase">Journal Entry for Oct {selectedDay}, 2026</span>
+              <div class="flex gap-1">
+                {['😊', '⚡', '😐', '😔', '🔥'].map(m => (
+                  <button 
+                    key={m} 
+                    onClick={() => setSelectedMood(m)} 
+                    class={`p-1 rounded-lg text-xs ${selectedMood === m ? 'bg-blue-500/20 border border-blue-500/50' : 'opacity-60'}`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea 
+              rows="3" 
+              placeholder="Record your thoughts or events for this day..."
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              class="w-full p-3 rounded-2xl bg-slate-100 dark:bg-slate-700/50 text-xs font-medium border-none text-slate-900 dark:text-slate-100 resize-none"
+            />
+
+            <button onClick={handleSaveNote} class="w-full py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20">
+              Save Note for Oct {selectedDay}
+            </button>
+          </div>
+
+        </div>
+      );
+    }
+
+    function AchievementsView({ data, onClaimAchievement, onBack }) {
+      const [tab, setTab] = useState('all');
+
+      const filteredAchievements = data.achievements.filter(a => {
+        if (tab === 'claimable') return a.unlocked && !a.claimed;
+        if (tab === 'unlocked') return a.claimed;
+        if (tab === 'in_progress') return !a.unlocked;
+        return true;
+      });
+
+      return (
+        <div class="space-y-4">
+          <button onClick={onBack} class="text-xs font-bold text-blue-500 flex items-center gap-1">
+            <Icon name="arrowLeft" classNames="w-4 h-4" /> Back to Hub
+          </button>
+
+          <div class="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'claimable', label: 'Claimable' },
+              { id: 'in_progress', label: 'In Progress' },
+              { id: 'unlocked', label: 'Completed' }
+            ].map(t => (
+              <button 
+                key={t.id} 
+                onClick={() => setTab(t.id)}
+                class={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
+                  tab === t.id ? 'bg-amber-500 text-white' : 'bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div class="space-y-3">
+            {filteredAchievements.map(a => {
+              const currentVal = a.current || 0;
+              const targetVal = a.target || 1;
+              const pct = Math.min(100, Math.round((currentVal / targetVal) * 100));
+
+              return (
+                <div 
+                  key={a.id} 
+                  class={`p-4 rounded-3xl border flex flex-col gap-3 transition-all ${
+                    a.claimed 
+                      ? 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 opacity-70' 
+                      : a.unlocked 
+                      ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500 shadow-md shadow-amber-500/10' 
+                      : 'bg-slate-100/50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div class="flex items-center gap-3.5">
+                    <div class={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm ${
+                      a.unlocked ? 'bg-amber-500 text-white' : 'bg-slate-200 dark:bg-slate-800'
+                    }`}>
+                      {a.icon}
+                    </div>
+
+                    <div class="flex-1">
+                      <div class="flex justify-between items-center">
+                        <h4 class="font-bold text-sm text-slate-900 dark:text-white">{a.title}</h4>
+                        <span class="text-[9px] font-bold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                          +{a.rewardXp} XP
+                        </span>
+                      </div>
+                      <p class="text-xs text-slate-400 mt-0.5">{a.desc}</p>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div class="space-y-1">
+                    <div class="flex justify-between text-[10px] text-slate-400 font-bold">
+                      <span>Progress</span>
+                      <span>{currentVal.toLocaleString()} / {targetVal.toLocaleString()} ({pct}%)</span>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                      <div class="h-full bg-amber-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Claim Button */}
+                  {a.unlocked && !a.claimed && (
+                    <button 
+                      onClick={() => onClaimAchievement(a.id)}
+                      class="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-xs rounded-2xl shadow-md shadow-amber-500/20 active:scale-95 transition-all"
+                    >
+                      🎁 Claim +{a.rewardXp} XP Reward
+                    </button>
+                  )}
+
+                  {a.claimed && (
+                    <div class="text-[10px] text-emerald-500 font-extrabold flex items-center justify-end gap-1">
+                      <span>✓ Completed & Claimed</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function SettingsView({ data, setData, onBack, onOpenReset, triggerToast }) {
+      const [waterGoal, setWaterGoal] = useState(data.waterTarget.toString());
+      const fileInputRef = useRef(null);
+
+      const handleSaveSettings = () => {
+        playSound('success');
+        const g = parseInt(waterGoal) || 8;
+        setData(prev => ({
+          ...prev,
+          waterTarget: g
+        }));
+        triggerToast('Settings updated!');
+      };
+
+      const handleExportData = () => {
+        playSound('pop');
+        const str = JSON.stringify(data, null, 2);
+        const blob = new Blob([str], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `everyday_pwa_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        triggerToast('Backup JSON downloaded!');
+      };
+
+      const handleImportData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const parsed = JSON.parse(evt.target.result);
+            if (parsed && typeof parsed === 'object' && parsed.xp !== undefined) {
+              setData(parsed);
+              playSound('success');
+              triggerToast('Data restored from JSON file!');
+            } else {
+              triggerToast('Invalid JSON backup file structure.');
+            }
+          } catch (err) {
+            triggerToast('Failed to parse backup JSON file.');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      return (
+        <div class="space-y-4">
+          <button onClick={onBack} class="text-xs font-bold text-blue-500 flex items-center gap-1">
+            <Icon name="arrowLeft" classNames="w-4 h-4" /> Back to Hub
+          </button>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-400 uppercase">Daily Hydration Target</h4>
+            <div class="flex items-center gap-3">
+              <input 
+                type="number" 
+                value={waterGoal} 
+                onChange={e => setWaterGoal(e.target.value)}
+                class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-xs font-bold w-24 text-center"
+              />
+              <span class="text-xs font-semibold text-slate-500">Glasses / Day</span>
+            </div>
+            <button onClick={handleSaveSettings} class="w-full py-2.5 bg-blue-500 text-white rounded-xl text-xs font-bold hover:bg-blue-600 transition-all">Save Preferences</button>
+          </div>
+
+          <div class="p-4 rounded-3xl bg-white dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3 shadow-sm">
+            <h4 class="text-xs font-bold text-slate-400 uppercase">Data Backup & Restore</h4>
+            <div class="flex gap-2">
+              <button onClick={handleExportData} class="flex-1 py-2.5 bg-slate-800 dark:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                <span>📥</span> Export JSON
+              </button>
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} class="flex-1 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl text-xs font-bold flex items-center justify-center gap-1">
+                <span>📤</span> Import JSON
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleImportData} accept=".json" class="hidden" />
+            </div>
+          </div>
+
+          {/* Explicit Reset Zone */}
+          <div class="p-4 rounded-3xl bg-red-500/10 border border-red-500/20 space-y-2">
+            <h4 class="text-xs font-bold text-red-500 uppercase">Danger Zone</h4>
+            <button 
+              onClick={onOpenReset} 
+              class="w-full py-3 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-2xl text-xs font-black shadow-md shadow-red-500/20 transition-all flex items-center justify-center gap-2"
+            >
+              <span>⚠️</span> Factory Reset App to Zero
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
